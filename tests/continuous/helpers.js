@@ -4,6 +4,10 @@ const ORIGIN = 'http://127.0.0.1:4173';
 const test = base.extend({
   page: async ({ page, context }, use, info) => {
     const logs = [], errors = [], external = [];
+    context.on('request', request => {
+      const url = new URL(request.url());
+      if (['http:', 'https:'].includes(url.protocol) && url.origin !== ORIGIN) external.push(url.origin);
+    });
     // Service workers use the existing staging CSP; routes also guard page traffic.
     await context.route('**/*', route => {
       const url = new URL(route.request().url());

@@ -24,34 +24,32 @@ test('P0 real browser close and reopen preserves IndexedDB', async ({ browserNam
   let before;
   try {
     context = await engine.launchPersistentContext(profile, options);
-    await context.tracing.start({ screenshots: true, snapshots: true, sources: true });
     const page = await context.newPage(); await ready(page); await addWod(page);
     before = (await backup(page)).wods;
   } finally {
     if (context) {
-      const path = info.outputPath('before-close.zip');
-      await context.tracing.stop({ path });
-      await info.attach('before-close', { path, contentType: 'application/zip' });
+      // Playwright Test owns tracing for explicitly-created contexts too.
+      // Manually stopping it breaks the runner's trace collection on close.
       await context.close(); context = null;
     }
   }
   try {
     context = await engine.launchPersistentContext(profile, options);
-    await context.tracing.start({ screenshots: true, snapshots: true, sources: true });
     const page = await context.newPage(); await ready(page);
     expect((await backup(page)).wods).toEqual(before);
     await page.screenshot({ path: info.outputPath('reopened.png'), fullPage: true });
   } finally {
     if (context) {
-      const path = info.outputPath('after-reopen.zip');
-      await context.tracing.stop({ path });
-      await info.attach('after-reopen', { path, contentType: 'application/zip' });
       await context.close();
     }
   }
 });
 
 test('P1 service worker controls app and offline reload preserves data', async ({ page, context }) => {
+  // Request interception changes Firefox's offline/SW network path. Use its
+  // native path here; staging CSP still forbids external connections and the
+  // fixture records any attempted external origin.
+  await context.unrouteAll({ behavior: 'wait' });
   await ready(page); await addWod(page);
   const before = (await backup(page)).wods;
   await page.evaluate(async () => {
