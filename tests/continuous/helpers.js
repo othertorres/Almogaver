@@ -24,8 +24,16 @@ const test = base.extend({
   },
 });
 async function ready(page) {
-  await page.goto('/');
+  // Fresh and persistent contexts created explicitly do not inherit baseURL.
+  await page.goto(ORIGIN + '/');
   await expect(page.locator('html')).toHaveAttribute('data-persistence', 'ready');
+  // A fresh profile must enter local mode through the actual welcome UI.
+  const welcome = page.locator('#access-screen');
+  if (await welcome.isVisible()) {
+    await welcome.getByRole('button', { name: 'Continuar sin cuenta', exact: true }).click();
+    await expect(welcome).toBeHidden();
+    await idle(page);
+  }
 }
 async function idle(page) { await page.evaluate(() => AlmogaverStorage.idle()); }
 async function backup(page) { return page.evaluate(() => AlmogaverStorage.export()); }
