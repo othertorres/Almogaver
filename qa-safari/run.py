@@ -85,7 +85,10 @@ class Driver:
         return self.request('POST', '/element', {'using': 'css selector', 'value': selector})[ELEMENT]
 
     def click(self, selector):
-        self.request('POST', '/element/' + self.find(selector) + '/click', {})
+        self.wait(lambda: self.script('const e=document.querySelector(arguments[0]);return !!e&&e.getClientRects().length>0&&!e.disabled', selector), 'visible enabled ' + selector)
+        element = self.find(selector)
+        self.script('arguments[0].scrollIntoView({block:"center",inline:"center"});return true', {ELEMENT: element})
+        self.request('POST', '/element/' + element + '/click', {})
 
     def fill(self, selector, value):
         element = self.find(selector)
@@ -124,6 +127,7 @@ def prepare(driver):
     initial = driver.confirmed()
     assert len(initial) == 1 and initial[0]['name'] == OLD, initial
     driver.click('.nav[data-screen="training-screen"]')
+    driver.click('#personal-home [data-home-action="library"]')
     driver.click('[data-action="edit"]')
     driver.fill('[data-plan-name]', EDITED)
     driver.click('#review-confirm')
