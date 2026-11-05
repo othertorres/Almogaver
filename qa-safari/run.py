@@ -79,6 +79,9 @@ class Driver:
         raise AssertionError('Timed out waiting for ' + label)
 
     def find(self, selector):
+        # Unlike Playwright, a raw WebDriver find does not auto-wait for an
+        # asynchronous application transition to render its next form.
+        self.wait(lambda: self.script('return document.querySelector(arguments[0])!==null', selector), selector)
         return self.request('POST', '/element', {'using': 'css selector', 'value': selector})[ELEMENT]
 
     def click(self, selector):
