@@ -44,6 +44,7 @@ async function observe(page, pause = false) {
 }
 
 async function attach(info, data) {
+  console.log('SAVE_EXPERIMENT ' + JSON.stringify(data));
   await info.attach('save-investigation', { body: JSON.stringify(data, null, 2), contentType: 'application/json' });
 }
 
