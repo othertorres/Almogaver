@@ -42,7 +42,8 @@ class Driver:
         return value
 
     def start(self):
-        caps = {'browserName': 'Safari', 'platformName': 'macOS'}
+        # Native desktop Safari is the driver's default; iOS is explicit below.
+        caps = {'browserName': 'Safari'}
         if self.platform == 'ios-simulator':
             caps.update({'platformName': 'iOS', 'safari:useSimulator': True,
                          'safari:deviceUDID': os.environ['QA_SIMULATOR_UDID']})
