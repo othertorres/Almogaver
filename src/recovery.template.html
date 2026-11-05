@@ -1,0 +1,42 @@
+<!doctype html><html lang="es"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>ALMOGÀVER · Recuperación de desarrollo</title>
+<body><h1>Recuperación ALMOGÀVER</h1><p>Herramienta independiente de la app 7.1.1. No borra generaciones ni claves antiguas. Trabaja en el mismo origen y perfil que la aplicación.</p>
+<p id="status" role="status">Abriendo…</p><button id="export">Exportar generación activa v2</button><button id="raw">Exportar capturas heredadas completas</button><p><label>Generación anterior <select id="generation"></select></label><button id="export-generation">Exportar generación elegida</button><button id="recover">Activar copia de generación elegida</button></p><p><label>Restaurar backup v1/v2 <input type="file" id="import" accept=".json,application/json"></label></p><pre id="preview"></pre><a href="./">Volver al entrenamiento</a>
+<section id="legacy-absence" hidden aria-labelledby="legacy-title"><h2 id="legacy-title">Revisar la copia protegida</h2>
+<p id="legacy-explanation" role="status" aria-live="polite"></p><pre id="legacy-details"></pre>
+<button id="legacy-inspect" type="button">Volver a comprobar</button>
+<div id="legacy-steps" hidden><p>Continuar conservará la información actual de IndexedDB. No importará la captura antigua, no fusionará datos ni borrará claves. Si el legado reaparece, la aplicación volverá a bloquear cambios.</p>
+<button id="legacy-backup" type="button">Descargar copia comprobada v2</button>
+<button id="legacy-copy" type="button">Preparar JSON para guardar manualmente</button>
+<div id="legacy-manual" hidden><p>Copie este JSON completo y guárdelo en un archivo antes de confirmar. No se envía a ningún servicio.</p><label for="legacy-json">Copia completa v2 comprobada</label><textarea id="legacy-json" readonly rows="12" style="width:100%;max-width:100%;box-sizing:border-box"></textarea><button id="legacy-select" type="button">Seleccionar JSON completo</button></div>
+<p><label><input id="legacy-consent" type="checkbox">He revisado la copia exportada y quiero continuar con estos datos de entrenamiento.</label></p>
+<button id="legacy-continue" type="button" disabled>Continuar con la copia protegida</button> <button id="legacy-cancel" type="button">Cancelar recuperación</button></div></section>
+<!-- STORAGE -->
+<!-- PWA -->
+<script>
+(async()=>{'use strict';const $=s=>document.querySelector(s),status=m=>$('#status').textContent=m, repo=new AlmogaverPersistence.Repository();
+function download(value,name){const a=document.createElement('a'),u=URL.createObjectURL(new Blob([JSON.stringify(value,null,2)],{type:'application/json'}));a.href=u;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(u),2000)}
+async function load(){const list=await repo.generations();$('#generation').replaceChildren();for(const g of list){const o=document.createElement('option');o.value=g.id;o.textContent=g.createdAt+' · '+g.reason+' · '+g.id;$('#generation').append(o)}}
+async function guard(work){try{await work()}catch(e){status('Operación no completada: '+e.message)}}
+let needsReview=false;
+try{window.AlmogaverStorage=repo;await repo.open();status('Generación activa: '+repo.control.generation);await load()}catch(e){needsReview=true;status(e.message);if(repo.db)await load()}
+$('#export').onclick=()=>guard(async()=>download(await repo.export(),'ALMOGAVER_recuperacion_v2.json'));
+$('#raw').onclick=()=>guard(async()=>{const tx=repo.db.transaction('legacySnapshots'),r=tx.objectStore('legacySnapshots').getAll();r.onsuccess=()=>download({app:'ALMOGAVER_LEGACY_CAPTURES',captures:r.result},'ALMOGAVER_capturas_heredadas.json')});
+$('#export-generation').onclick=()=>guard(async()=>download(await repo.generationBackup($('#generation').value),'ALMOGAVER_generacion_v2.json'));
+$('#recover').onclick=()=>guard(async()=>{if(!confirm('Se activará una copia completa de la generación seleccionada. Se conservará la generación actual. ¿Continuar?'))return;await repo.recover($('#generation').value);status('Recuperación confirmada por IndexedDB: '+repo.control.generation);await load()});
+let legacyPlan=null,backupRequested=false,recovering=false,backupMethod=null;
+const controls=()=>{$('#legacy-continue').disabled=recovering||!legacyPlan||!backupRequested||!$('#legacy-consent').checked;$('#legacy-backup').disabled=recovering||!legacyPlan;$('#legacy-copy').disabled=recovering||!legacyPlan;$('#legacy-inspect').disabled=recovering;$('#legacy-cancel').disabled=recovering;$('#legacy-consent').disabled=recovering};
+async function inspectAbsence(){legacyPlan=null;backupRequested=false;backupMethod=null;$('#legacy-manual').hidden=true;$('#legacy-json').value='';$('#legacy-consent').checked=false;const inspected=await repo.inspectLegacyAbsence();$('#legacy-absence').hidden=false;$('#legacy-steps').hidden=!inspected.eligible;
+ if(inspected.eligible){legacyPlan=inspected;$('#legacy-explanation').textContent='Los datos antiguos del navegador ya no están disponibles. Hemos verificado y conservado la información de entrenamiento de la copia protegida; revisa y exporta antes de continuar.';$('#legacy-details').textContent='Generación comprobada: '+inspected.generation+' · revisión '+inspected.revision+'\nMódulos conservados:\n'+inspected.modules.join('\n')}
+ else{$('#legacy-explanation').textContent='No se autoriza continuar automáticamente. '+inspected.reason+' Puede exportar las generaciones y capturas disponibles para revisarlas.';$('#legacy-details').textContent='No se ha confirmado ninguna recuperación.'}controls();}
+$('#legacy-inspect').onclick=()=>guard(inspectAbsence);
+$('#legacy-consent').onchange=controls;
+$('#legacy-backup').onclick=()=>guard(async()=>{if(!legacyPlan||recovering)throw Error('Vuelva a comprobar la copia.');download(legacyPlan.backup,'ALMOGAVER_copia_comprobada_v2.json');backupRequested=true;backupMethod='download-requested';controls()});
+$('#legacy-copy').onclick=()=>{if(!legacyPlan||recovering)return;$('#legacy-json').value=JSON.stringify(legacyPlan.backup,null,2);$('#legacy-manual').hidden=false;backupRequested=true;backupMethod='manual-json';controls()};
+$('#legacy-select').onclick=()=>{$('#legacy-json').focus();$('#legacy-json').select()};
+$('#legacy-cancel').onclick=()=>{if(recovering)return;legacyPlan=null;repo.legacyRecoveryPrepared=null;backupRequested=false;backupMethod=null;$('#legacy-json').value='';$('#legacy-manual').hidden=true;$('#legacy-consent').checked=false;$('#legacy-steps').hidden=true;$('#legacy-explanation').textContent='Recuperación cancelada. No se ha modificado ningún dato. Puede exportar o volver a comprobar la copia.';controls()};
+$('#legacy-continue').onclick=()=>guard(async()=>{if(recovering||!legacyPlan||!backupRequested||!$('#legacy-consent').checked)return;if(!confirm('Continuar conservará los entrenamientos actuales de IndexedDB y registrará esta decisión. No se importará la captura antigua ni se borrarán datos. ¿Confirmar?'))return;
+ recovering=true;controls();try{const confirmed=await repo.acceptLegacyAbsence(legacyPlan,{confirmed:true,backupRequested,backupMethod});status('Decisión de recuperación confirmada por IndexedDB. Puede volver al entrenamiento.');$('#legacy-explanation').textContent='Se conserva la copia protegida y el rastro de su decisión. No se ha restaurado información antigua.';$('#legacy-details').textContent='Generación activa: '+confirmed.generation+'\nRecibo: '+confirmed.receipt;legacyPlan=null;$('#legacy-steps').hidden=true;await load()}finally{recovering=false;controls()}});
+if(needsReview&&repo.db)await guard(inspectAbsence);
+$('#import').onchange=()=>guard(async()=>{const f=$('#import').files[0];if(!f)return;if(f.size>15000000)throw Error('Archivo demasiado grande; no se ha escrito.');await repo.refresh();const prepared=repo.prepare(JSON.parse(await f.text()));$('#preview').textContent=JSON.stringify({replace:prepared.replace,remove:prepared.remove,retain:prepared.retain},null,2);if(!confirm($('#preview').textContent+'\n¿Confirmar este alcance?'))return;await repo.restore(prepared);status('Restauración confirmada por IndexedDB.');await load()});
+})();
+</script></body></html>

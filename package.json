@@ -1,0 +1,13 @@
+{
+  "name": "almogaver-local-qa",
+  "private": true,
+  "scripts": {
+    "test": "playwright test",
+    "test:model": "node tests/continuous/model.test.cjs",
+    "test:staging": "python3 tests/continuous/staging_check.py",
+    "test:gate": "python3 tests/continuous/verdict_check.py",
+    "test:report": "playwright show-report .local/qa/report"
+  },
+  "devDependencies": { "@playwright/test": "1.62.1" },
+  "engines": { "node": ">=22" }
+}

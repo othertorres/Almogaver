@@ -1,0 +1,70 @@
+name: Local QA (no deploy)
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+  schedule:
+    - cron: '17 5 * * 1'
+permissions:
+  contents: read
+concurrency:
+  group: qa-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  e2e:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        project: [chromium, firefox, webkit, mobile-chromium, mobile-webkit]
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - name: Validate models and isolated PWA snapshot
+        run: |
+          npm run test:model
+          npm run test:staging
+          npm run test:gate
+      - name: Install browser and system libraries
+        run: npx playwright install --with-deps chromium firefox webkit
+      - name: Record environment
+        run: |
+          mkdir -p .local/qa
+          git rev-parse HEAD > .local/qa/commit.txt
+          node --version > .local/qa/node.txt
+          npx playwright --version > .local/qa/playwright.txt
+      - name: Run synthetic local tests
+        env:
+          DEBUG: pw:webserver
+        shell: bash
+        run: |
+          set -o pipefail
+          npm test -- --project=${{ matrix.project }} 2>&1 | tee .local/qa/run.log
+      - name: Require executed tests and zero failures or skips
+        if: always()
+        run: node scripts/qa-verdict.js
+      - name: Preserve evidence (never browser profiles)
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: qa-${{ matrix.project }}-${{ github.sha }}
+          retention-days: 14
+          if-no-files-found: error
+          include-hidden-files: true
+          path: |
+            .local/qa/report/
+            .local/qa/results/**/*.zip
+            .local/qa/results/**/*.png
+            .local/qa/results/**/*.webm
+            .local/qa/results/**/synthetic-*.json
+            .local/qa/*.json
+            .local/qa/*.xml
+            .local/qa/*.txt
+            .local/qa/*.log
