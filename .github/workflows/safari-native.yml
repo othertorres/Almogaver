@@ -1,0 +1,45 @@
+name: Native Safari sandbox investigation
+on:
+  push:
+    branches: [investigate/safari-native]
+    paths: ['qa-safari/**', '.github/workflows/safari-native.yml']
+permissions:
+  contents: read
+jobs:
+  safari:
+    runs-on: macos-14
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: [macos, ios-simulator]
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Record native environment
+        run: |
+          mkdir -p .local/safari-native/${{ matrix.platform }}
+          sw_vers > .local/safari-native/${{ matrix.platform }}/macos.txt
+          /usr/bin/safaridriver --version > .local/safari-native/${{ matrix.platform }}/driver.txt
+          xcodebuild -version > .local/safari-native/${{ matrix.platform }}/xcode.txt
+          git rev-parse HEAD > .local/safari-native/${{ matrix.platform }}/commit.txt
+      - name: Enable native Safari automation only on ephemeral runner
+        run: sudo /usr/bin/safaridriver --enable
+      - name: Boot an installed iPhone simulator
+        if: matrix.platform == 'ios-simulator'
+        run: python3 qa-safari/prepare_simulator.py
+      - name: Run native save and reload experiments
+        shell: bash
+        run: |
+          set -o pipefail
+          python3 qa-safari/run.py --platform ${{ matrix.platform }} --samples 5 2>&1 | tee .local/safari-native/${{ matrix.platform }}/run.log
+      - name: Preserve native evidence even on failure
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: native-safari-${{ matrix.platform }}-${{ github.sha }}
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 14
+          path: .local/safari-native/${{ matrix.platform }}/
